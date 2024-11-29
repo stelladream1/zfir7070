@@ -1,0 +1,714 @@
+*&---------------------------------------------------------------------*
+*& Report ZFIR7070
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT ZFIR7070 MESSAGE-ID ZFIM02.
+TYPES: BEGIN OF TY_S_5400,
+         COL1 TYPE CHAR255,
+         COL2 TYPE CHAR255,
+         COL3 TYPE CHAR255,
+         COL4 TYPE CHAR255,
+         COL5 TYPE CHAR255,
+         COL6 TYPE CHAR255,
+         COL7 TYPE CHAR255,
+         COL8 TYPE CHAR255,
+         COL9 TYPE CHAR255,
+       END OF TY_S_5400.
+
+TYPES: BEGIN OF TY_S_3600,
+         COL1  TYPE CHAR255,
+         COL2  TYPE CHAR255,
+         COL3  TYPE CHAR255,
+         COL4  TYPE CHAR255,
+         COL5  TYPE CHAR255,
+         COL6  TYPE CHAR255,
+         COL7  TYPE CHAR255,
+         COL8  TYPE CHAR255,
+         COL9  TYPE CHAR255,
+         COL10 TYPE CHAR255,
+         COL11 TYPE CHAR255,
+         COL12 TYPE CHAR255,
+         COL13 TYPE CHAR255,
+         COL14 TYPE CHAR255,
+         COL15 TYPE CHAR255,
+       END OF TY_S_3600.
+
+DATA: GS_EXPORT TYPE TY_S_5400,
+      GS_ESTATE TYPE TY_S_3600.
+
+DATA: GV_ROW         TYPE I,
+      LV_WAERS       TYPE WAERS,
+      GT_EXCEL       TYPE TABLE OF ZFIS0009,
+      GT_EXCEL_FINAL TYPE TABLE OF ZFIS0009, " ZRPFTS_EXCEL.
+      LS_EXCEL_FINAL TYPE ZFIS0009.
+
+DATA: GV_SUM_FC  TYPE ZERPFT_CURRV,    "외화 합계
+      GV_SUM_KRW TYPE ZERPFT_CURRV.    "원화 합계
+
+
+DATA: GS_5400 TYPE TY_S_5400,
+      GS_3600 TYPE TY_S_3600,
+      GT_5400 TYPE STANDARD TABLE OF TY_S_5400,
+      GT_3600 TYPE STANDARD TABLE OF TY_S_3600.
+
+DATA: GV_COUNT TYPE NUMC10.            "건수
+
+DATA: GS_6180 TYPE ZRPFTT6180,
+      GT_6180 TYPE STANDARD TABLE OF ZRPFTT6180.
+
+CONSTANTS: GC_VRPCD_5400 VALUE 'I105400' TYPE ZERPFT_VRPCD,
+           GC_VRPCD_4000 VALUE 'I104000' TYPE ZERPFT_VRPCD,
+           GC_VRPCD_3200 VALUE 'I103200' TYPE ZERPFT_VRPCD,
+           GC_VRPCD_3600 VALUE 'I103600' TYPE ZERPFT_VRPCD,
+           GC_VRPCD_3900 VALUE 'I103900' TYPE ZERPFT_VRPCD,
+           GC_VSRPCD_100 VALUE '100'     TYPE ZERPFT_VSRPCD,
+           GC_VSRPCD_101 VALUE '101'     TYPE ZERPFT_VSRPCD,
+           GC_VSRPCD_102 VALUE '102'     TYPE ZERPFT_VSRPCD,
+           GC_CURRV      VALUE 'CURRV'   TYPE STRING,
+           GC_NUMVC      VALUE 'NUMC'    TYPE STRING.
+
+DATA: GV_6180_ROW TYPE ZRPFTT6180-ZROWID,
+      GV_6180_COL TYPE ZRPFTT6180-ZCOLID.
+
+DATA: GV_EXCEL_COL TYPE I,
+      GV_ERROR     TYPE C LENGTH 1,
+      GV_VALID     TYPE C LENGTH 1.
+
+INCLUDE <ICON>.
+TABLES: SSCRFIELDS.
+DATA: G_FUNCTION_KEY TYPE SMP_DYNTXT.
+
+SELECTION-SCREEN BEGIN OF BLOCK B01 WITH FRAME TITLE TEXT-001.
+  PARAMETERS: PA_BUKRS LIKE T001-BUKRS MEMORY ID BUK.
+  SELECTION-SCREEN BEGIN OF LINE.
+    SELECTION-SCREEN COMMENT (31) TEXT-S01 FOR FIELD PA_GJAHR.
+    PARAMETERS     : PA_GJAHR TYPE GJAHR MEMORY ID  GJR.
+    PARAMETERS     : PA_QUART TYPE ZERPFT_QUARTER.
+    SELECTION-SCREEN COMMENT (15) TEXT-S02 FOR FIELD PA_QUART.
+  SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN END OF BLOCK B01.
+
+SELECTION-SCREEN BEGIN OF BLOCK B02 WITH FRAME TITLE TEXT-002.
+  PARAMETERS: PA_FNAME TYPE RLGRAP-FILENAME.
+SELECTION-SCREEN END OF BLOCK B02.
+
+SELECTION-SCREEN BEGIN OF BLOCK B03 WITH FRAME TITLE TEXT-003.
+  SELECTION-SCREEN BEGIN OF LINE.
+    PARAMETERS: R1 TYPE BOOLEAN RADIOBUTTON GROUP RGP1.
+    SELECTION-SCREEN COMMENT (20) TEXT-006 FOR FIELD R1.
+
+    PARAMETERS: R2 TYPE BOOLEAN RADIOBUTTON GROUP RGP1.
+    SELECTION-SCREEN COMMENT (20) TEXT-005 FOR FIELD R2.
+
+  SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN END OF BLOCK B03.
+
+SELECTION-SCREEN: FUNCTION KEY 1.
+
+INITIALIZATION.
+  PERFORM SET_BUTTON.
+
+AT SELECTION-SCREEN.
+  PERFORM TEMPLATE_DOWNLOAD.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR PA_FNAME.
+  PERFORM F4_FNAME USING PA_FNAME.
+
+
+START-OF-SELECTION.
+  PERFORM CHECK_VALID.
+  CHECK GV_VALID IS INITIAL.
+
+  IF R1 = 'X'.
+    GV_EXCEL_COL = 9.
+    PERFORM UPLOAD_EXCEL USING GV_EXCEL_COL GV_ERROR GS_5400 GT_5400.
+
+    IF GV_ERROR IS NOT INITIAL.
+      MESSAGE I005 DISPLAY LIKE 'E'.
+    ELSE.
+      PERFORM INSERT_DATA_EXPORT.
+    ENDIF.
+
+  ELSEIF R2 = 'X'.
+    GV_EXCEL_COL = 15.
+    PERFORM UPLOAD_EXCEL USING GV_EXCEL_COL GV_ERROR GS_3600 GT_3600.
+
+    IF  GV_ERROR IS NOT INITIAL.
+      MESSAGE I005 DISPLAY LIKE 'E'.
+    ELSE.
+      PERFORM INSERT_DATA_ESTATE.
+    ENDIF.
+  ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Form F4_FNAME
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*&      --> P_
+*&---------------------------------------------------------------------*
+FORM F4_FNAME  USING PA_FNAME.
+  DATA: LV_DIRECTORY  TYPE STRING,
+        LT_FILE_TABLE TYPE FILETABLE,
+        LV_RC         TYPE I.
+
+  CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_OPEN_DIALOG
+    EXPORTING
+      WINDOW_TITLE      = CONV #( 'Excel Upload' )
+      DEFAULT_EXTENSION = CONV #( 'XLSX' )
+      DEFAULT_FILENAME  = SPACE
+      FILE_FILTER       = CL_GUI_FRONTEND_SERVICES=>FILETYPE_EXCEL
+      INITIAL_DIRECTORY = LV_DIRECTORY
+    CHANGING
+      FILE_TABLE        = LT_FILE_TABLE
+      RC                = LV_RC
+    EXCEPTIONS
+      OTHERS            = 5.
+
+  READ TABLE LT_FILE_TABLE INTO PA_FNAME INDEX 1.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form UPLOAD_EXCEL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM UPLOAD_EXCEL USING GV_EXCEL_COL GV_ERROR GS_CHECK GT_CHECK TYPE STANDARD TABLE.
+
+  GV_ROW = 1.
+  DATA: GT_TEMP LIKE GT_EXCEL.
+
+  CALL FUNCTION 'ZFC_FICM_ALSM_EXCEL_TO_ITAB'
+    EXPORTING
+      FILENAME                = PA_FNAME
+      I_BEGIN_COL             = 1
+      I_BEGIN_ROW             = GV_ROW
+      I_END_COL               = 20
+      I_END_ROW               = 60000
+    TABLES
+      INTERN                  = GT_EXCEL
+    EXCEPTIONS
+      INCONSISTENT_PARAMETERS = 1
+      UPLOAD_OLE              = 2
+      OTHERS                  = 3.
+
+  IF SY-SUBRC <> 0.
+    CASE SY-SUBRC.
+      WHEN 1.
+        MESSAGE I001 DISPLAY LIKE 'E'.
+      WHEN 2.
+        MESSAGE I002 DISPLAY LIKE 'E'.
+      WHEN 3.
+        MESSAGE I003 DISPLAY LIKE 'E'.
+    ENDCASE.
+  ENDIF.
+  CHECK GT_EXCEL IS NOT INITIAL.
+  SORT GT_EXCEL BY COL DESCENDING.
+
+  READ TABLE GT_EXCEL INTO DATA(GS_EXCEL) INDEX 1.
+  IF GS_EXCEL-COL <> GV_EXCEL_COL.
+    GV_ERROR = 'X'.
+  ENDIF.
+
+  DELETE GT_EXCEL WHERE ROW = 1.
+  SORT GT_EXCEL BY ROW COL.
+
+  FIELD-SYMBOLS: <F2> TYPE ANY,
+                 <F3> TYPE ANY.
+
+  CLEAR: GS_EXCEL.
+
+  LOOP AT GT_EXCEL INTO GS_EXCEL.
+    AT NEW ROW.
+      CLEAR: GS_EXCEL, GS_CHECK.
+    ENDAT.
+    ASSIGN COMPONENT GS_EXCEL-COL OF STRUCTURE GS_CHECK TO FIELD-SYMBOL(<FS_DATA>).
+    <FS_DATA> = GS_EXCEL-VALUE.
+
+    AT END OF ROW.
+      IF GS_CHECK IS NOT INITIAL.
+        APPEND GS_CHECK TO GT_CHECK.
+      ENDIF.
+    ENDAT.
+  ENDLOOP.
+
+  CLEAR: GS_CHECK.
+  DATA: LV_ROW TYPE  I VALUE 1.
+  FIELD-SYMBOLS: <FS_COLUMN> TYPE ANY.
+
+  LOOP AT GT_CHECK INTO GS_CHECK.
+    DO GV_EXCEL_COL TIMES.
+      ASSIGN COMPONENT SY-INDEX OF STRUCTURE GS_CHECK TO <FS_COLUMN>.
+      LS_EXCEL_FINAL-ROW = LV_ROW.
+      LS_EXCEL_FINAL-COL = SY-INDEX.
+      LS_EXCEL_FINAL-VALUE = CONV CHAR255( <FS_COLUMN> ).
+
+      APPEND LS_EXCEL_FINAL TO GT_EXCEL_FINAL.
+    ENDDO.
+    LV_ROW = LV_ROW + 1.
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CURRENCY_INTERNAL
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CURRENCY_INTERNAL USING PV_AMT
+                             PV_WAERS.
+  CHECK PV_AMT IS NOT INITIAL.
+  CALL FUNCTION 'CURRENCY_AMOUNT_IDOC_TO_SAP'
+    EXPORTING
+      CURRENCY    = PV_WAERS
+      IDOC_AMOUNT = PV_AMT
+    IMPORTING
+      SAP_AMOUNT  = PV_AMT.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form INSERT_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM INSERT_DATA_EXPORT .
+*&---------------------------------------------------------------------*
+*& 1. I105400-102.수출실적명세서-세부사항 업로드
+*&---------------------------------------------------------------------*
+  CLEAR: GT_6180, GS_6180, GV_COUNT.
+
+  GV_COUNT = 0.
+
+  LOOP AT GT_EXCEL_FINAL INTO DATA(LS_EXCEL).
+    APPEND INITIAL LINE TO GT_6180 ASSIGNING FIELD-SYMBOL(<FS_6180>).
+    <FS_6180>-BUKRS     = PA_BUKRS.                                "회사코드
+    <FS_6180>-BUPLA     = ' '.
+    <FS_6180>-ZRYYYYQT  = | { PA_GJAHR }{ PA_QUART ALPHA = IN } |. "신고분기
+    <FS_6180>-VRPCD     = GC_VRPCD_5400.
+    <FS_6180>-VSRPCD    = GC_VSRPCD_102.
+    <FS_6180>-ERZET     = SY-TIMLO.                                "현재시간
+    <FS_6180>-ZROWID = LS_EXCEL-ROW .
+    <FS_6180>-ZCOLID = LS_EXCEL-COL.
+
+    IF <FS_6180>-ZCOLID / 5 < 1.
+      <FS_6180>-CHARV = LS_EXCEL-VALUE.
+
+    ELSEIF <FS_6180>-ZCOLID / 5 = 1.
+      <FS_6180>-DECV = LS_EXCEL-VALUE.
+
+    ELSE.
+      REPLACE ALL OCCURRENCES OF: ',' IN  LS_EXCEL-VALUE WITH ''.
+      PERFORM CURRENCY_INTERNAL USING  LS_EXCEL-VALUE 'KRW'.
+      CASE <FS_6180>-ZCOLID.
+        WHEN 6. "6.외화금액
+          <FS_6180>-CURRV = LS_EXCEL-VALUE.
+        WHEN 7. "7.원화금액
+          <FS_6180>-CURRV = LS_EXCEL-VALUE.
+        WHEN 8. "8.외화금액합계
+          <FS_6180>-CURRV = LS_EXCEL-VALUE.
+          IF <FS_6180>-ZROWID = 1.
+            GV_SUM_FC = <FS_6180>-CURRV.
+          ENDIF.
+        WHEN 9.  "9.원화금액합계
+
+          <FS_6180>-CURRV = LS_EXCEL-VALUE.
+          IF <FS_6180>-ZROWID = 1.
+            GV_SUM_KRW = <FS_6180>-CURRV.
+          ENDIF.
+      ENDCASE.
+
+    ENDIF.
+    GV_COUNT = LS_EXCEL-ROW.
+  ENDLOOP.
+
+  GS_6180-BUKRS     = PA_BUKRS.                                "회사코드
+  GS_6180-BUPLA     = ' '.
+  GS_6180-ZRYYYYQT  = | { PA_GJAHR }{ PA_QUART ALPHA = IN } |. "신고분기
+  GS_6180-VRPCD     = GC_VRPCD_5400.
+  GS_6180-VSRPCD    = GC_VSRPCD_102.
+  GS_6180-ERZET     = SY-TIMLO.                                "현재시간
+
+  DELETE FROM ZRPFTT6187 WHERE VRPCD    = GS_6180-VRPCD
+                          AND  VSRPCD   = GS_6180-VSRPCD
+                          AND  BUKRS    = GS_6180-BUKRS
+                          AND  BUPLA    = GS_6180-BUPLA
+                          AND  ZRYYYYQT = GS_6180-ZRYYYYQT.
+
+  INSERT ZRPFTT6187 FROM TABLE GT_6180.
+  CLEAR : GT_6180.
+*&---------------------------------------------------------------------*
+*& 2. I105400-101.수출실적명세서 합계 업로드
+*&---------------------------------------------------------------------*
+
+  GS_6180-VRPCD = GC_VRPCD_5400.
+  GS_6180-VSRPCD = GC_VSRPCD_101.
+  GV_6180_ROW = '2'.
+
+  DO 3 TIMES.
+    CASE SY-INDEX.
+      WHEN 1.
+        GV_6180_COL = SY-INDEX.
+        PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_COUNT GC_NUMVC.
+      WHEN 2.
+        GV_6180_COL = SY-INDEX.
+        PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_SUM_FC GC_CURRV.
+      WHEN 3.
+        GV_6180_COL = SY-INDEX.
+        PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_SUM_KRW GC_CURRV.
+    ENDCASE.
+  ENDDO.
+
+*&---------------------------------------------------------------------*
+*& 3. I104000-101.영세율 적용 직접수출 금액  업로드
+*&---------------------------------------------------------------------*
+  GV_6180_ROW = '1'.
+  GV_6180_COL = '1'.
+  GS_6180-VRPCD = GC_VRPCD_4000.
+  GS_6180-VSRPCD  = GC_VSRPCD_101.
+  PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_SUM_KRW GC_CURRV.
+
+*&---------------------------------------------------------------------*
+*& 4. I103200-101. 매출 영세율 기타 공급가액 업로드
+*&---------------------------------------------------------------------*
+  GV_6180_ROW = '6'.
+  GV_6180_COL = '1'.
+  GS_6180-VRPCD = GC_VRPCD_3200.
+  GS_6180-VSRPCD  = GC_VSRPCD_101.
+  PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_SUM_KRW GC_CURRV.
+
+*&---------------------------------------------------------------------*
+*& 5. I103900-100. 매출세액 영세율 기타분 과세표준  업로드
+*&---------------------------------------------------------------------*
+
+  SELECT SINGLE *
+  FROM ZRPFTT6180
+  WHERE VRPCD    = @GC_VRPCD_3900
+  AND   VSRPCD   = @GC_VSRPCD_100
+  AND   BUPLA    = 'SJ00'
+  AND   ZRYYYYQT = @GS_6180-ZRYYYYQT
+  AND   BUKRS    = @GS_6180-BUKRS
+  INTO @DATA(LS_SJ00).
+
+  GS_6180-BUPLA = 'SJ00'.
+  GV_6180_ROW = LS_SJ00-ZROWID.
+  GV_6180_COL = '9'.
+  GS_6180-VRPCD = GC_VRPCD_3900.
+  GS_6180-VSRPCD = GC_VSRPCD_100.
+  PERFORM SET_DATA USING GS_6180-BUKRS GS_6180-BUPLA GS_6180-ZRYYYYQT GS_6180-VRPCD GS_6180-VSRPCD GV_6180_ROW GV_6180_COL GV_SUM_KRW GC_CURRV.
+
+  IF SY-SUBRC = 0 .
+    MESSAGE S000.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_DATA
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_DATA USING BUKRS BUPLA ZRYYYYQT VRPCD VSRPCD ZROWID ZCOLID VALUE TYPE.
+
+  CLEAR: GT_6180.
+
+  DELETE FROM ZRPFTT6187 WHERE BUKRS     = BUKRS
+                         AND   BUPLA     = BUPLA
+                         AND   ZRYYYYQT  = ZRYYYYQT
+                         AND   VRPCD     = VRPCD
+                         AND   VSRPCD    = VSRPCD
+                         AND   ZROWID    = ZROWID
+                         AND   ZCOLID    = ZCOLID.
+
+
+  DELETE FROM ZRPFTT6180 WHERE BUKRS     = BUKRS
+                         AND   BUPLA     = BUPLA
+                         AND   ZRYYYYQT  = ZRYYYYQT
+                         AND   VRPCD     = VRPCD
+                         AND   VSRPCD    = VSRPCD
+                         AND   ZROWID    = ZROWID
+                         AND   ZCOLID    = ZCOLID.
+
+
+  APPEND INITIAL LINE TO GT_6180 ASSIGNING FIELD-SYMBOL(<FS_6180>).
+  <FS_6180>-BUKRS = BUKRS.
+  <FS_6180>-BUPLA = BUPLA.
+  <FS_6180>-ZRYYYYQT = ZRYYYYQT.
+  <FS_6180>-VRPCD = VRPCD.
+  <FS_6180>-VSRPCD = VSRPCD.
+  <FS_6180>-ZROWID = ZROWID.
+  <FS_6180>-ZCOLID = ZCOLID.
+
+  IF TYPE = 'CURRV'.
+    <FS_6180>-CURRV = VALUE.
+  ELSEIF TYPE = 'NUMC'.
+    <FS_6180>-NUMCV = VALUE.
+  ENDIF.
+  INSERT ZRPFTT6180 FROM TABLE GT_6180.
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form INSERT_DATA_estate
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM INSERT_DATA_ESTATE .
+  CLEAR: GT_6180, GS_6180.
+
+  DATA: LV_BUPLA TYPE ZRPFTT6180-BUPLA.
+  LOOP AT GT_EXCEL_FINAL INTO DATA(LS_EXCEL).
+
+    IF LS_EXCEL-COL = 1.
+
+      CLEAR LV_BUPLA.
+      IF LS_EXCEL-VALUE IS INITIAL.
+        LV_BUPLA = ' '.
+      ELSE.
+        LV_BUPLA = LS_EXCEL-VALUE.
+      ENDIF.
+
+    ELSE.
+      APPEND INITIAL LINE TO GT_6180 ASSIGNING FIELD-SYMBOL(<FS_6180>).
+      <FS_6180>-BUKRS     = PA_BUKRS.                                "회사코드
+      <FS_6180>-BUPLA     = LV_BUPLA.
+      <FS_6180>-ZRYYYYQT  = | { PA_GJAHR }{ PA_QUART ALPHA = IN } |. "신고분기
+      <FS_6180>-VRPCD     = GC_VRPCD_3600.
+      <FS_6180>-VSRPCD    = GC_VSRPCD_101.
+      <FS_6180>-ERZET     = SY-TIMLO.                                "현재시간
+*      <FS_6180>-ZROWID = LS_EXCEL-ROW + 1.
+      <FS_6180>-ZROWID = LS_EXCEL-ROW .
+      <FS_6180>-ZCOLID = LS_EXCEL-COL - 1.
+
+      IF <FS_6180>-ZCOLID < 11.
+        <FS_6180>-CHARV = LS_EXCEL-VALUE.
+      ELSE.
+        REPLACE ALL OCCURRENCES OF: ',' IN LS_EXCEL-VALUE WITH ''.
+        PERFORM CURRENCY_INTERNAL USING LS_EXCEL-VALUE 'KRW'.
+        <FS_6180>-CURRV = LS_EXCEL-VALUE.
+      ENDIF.
+
+    ENDIF.
+  ENDLOOP.
+
+
+  GS_6180-BUKRS     = PA_BUKRS.                                "회사코드
+  GS_6180-ZRYYYYQT  = | { PA_GJAHR }{ PA_QUART ALPHA = IN } |. "신고분기
+  GS_6180-VRPCD     = GC_VRPCD_3600.
+  GS_6180-VSRPCD    = GC_VSRPCD_101.
+
+  DELETE FROM ZRPFTT6180 WHERE VRPCD    = GS_6180-VRPCD
+                          AND  VSRPCD   = GS_6180-VSRPCD
+                          AND  BUKRS    = GS_6180-BUKRS
+                          AND  ZRYYYYQT = GS_6180-ZRYYYYQT.
+
+  INSERT ZRPFTT6180 FROM TABLE GT_6180.
+  IF SY-SUBRC = 0 .
+    MESSAGE S000.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_BUTTON
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_BUTTON .
+  G_FUNCTION_KEY-ICON_ID = ICON_XLS.
+  G_FUNCTION_KEY-ICON_TEXT = TEXT-011.
+  G_FUNCTION_KEY-TEXT      = TEXT-011.
+  SSCRFIELDS-FUNCTXT_01    = G_FUNCTION_KEY.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form TEMPLATE_DOWNLOAD
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM TEMPLATE_DOWNLOAD .
+  CASE SSCRFIELDS-UCOMM.
+    WHEN 'FC01'.
+      IF R1 = 'X'.
+        PERFORM SET_FKEY1.
+      ELSEIF R2 = 'X'.
+        PERFORM SET_FKEY2.
+      ENDIF.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_FKEY
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_FKEY1 .
+
+  DATA: LS_CONFIG   TYPE ZRDACL_EXCEL_COMMON=>TY_S_DOWNLOAD_CONFIG,
+        LT_TEMPLATE TYPE STANDARD TABLE OF TY_S_5400 WITH DEFAULT KEY.
+
+  LS_CONFIG-FILE_TITLE      = |ZFIR7070_I105400_{ SY-DATUM }_{ SY-UZEIT }.xlsx|.
+  LS_CONFIG-WORKSHEET_TITLE =  TEXT-012.
+  LS_CONFIG-TABLE_STYLE     = ZCL_EXCEL_TABLE=>BUILTINSTYLE_LIGHT11.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING FIELD-SYMBOL(<FS_COLUMN_CONFIG>).
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL1'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-013.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL2'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-014.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL3'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-015.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL4'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-016.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL5'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-017.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL6'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-018.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL7'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-019.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL8'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-020.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL9'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-021.
+
+  ZCLRC_UTILS=>EXCEL_DOWNLOAD(
+    EXPORTING
+      IS_CONFIG = LS_CONFIG
+      IT_DATA   = LT_TEMPLATE ).
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form SET_FKEY2
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM SET_FKEY2 .
+
+  DATA: LS_CONFIG   TYPE ZRDACL_EXCEL_COMMON=>TY_S_DOWNLOAD_CONFIG,
+        LT_TEMPLATE TYPE STANDARD TABLE OF TY_S_3600 WITH DEFAULT KEY.
+
+  LS_CONFIG-FILE_TITLE      = |ZFIR7070_I103600_{ SY-DATUM }_{ SY-UZEIT }.xlsx|.
+  LS_CONFIG-WORKSHEET_TITLE =  TEXT-022.
+  LS_CONFIG-TABLE_STYLE     = ZCL_EXCEL_TABLE=>BUILTINSTYLE_LIGHT11.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING FIELD-SYMBOL(<FS_COLUMN_CONFIG>).
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL1'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-040.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL2'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-023.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL3'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-024.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL4'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-025.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL5'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-026.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL6'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-027.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL7'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-028.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL8'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-029.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL9'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-030.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL10'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-031.
+
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL11'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-032.
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL12'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-033.
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL13'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-034.
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL14'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-035.
+  APPEND INITIAL LINE TO LS_CONFIG-COLUMN_CONFIG ASSIGNING <FS_COLUMN_CONFIG>.
+  <FS_COLUMN_CONFIG>-FLDNM    = 'COL15'.
+  <FS_COLUMN_CONFIG>-FLDTXT   = TEXT-036.
+
+  ZCLRC_UTILS=>EXCEL_DOWNLOAD(
+    EXPORTING
+      IS_CONFIG = LS_CONFIG
+      IT_DATA   = LT_TEMPLATE ).
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form CHECK_VALID
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM CHECK_VALID .
+
+  CLEAR: GV_VALID.
+  IF PA_FNAME IS INITIAL.
+    GV_VALID = 'E'.
+    MESSAGE S001(FSC1) WITH TEXT-002  DISPLAY LIKE 'E'.
+  ELSEIF PA_BUKRS IS INITIAL.
+    GV_VALID = 'E'.
+    MESSAGE S001(FSC1) WITH TEXT-037  DISPLAY LIKE 'E'.
+  ELSEIF PA_GJAHR IS INITIAL.
+    GV_VALID = 'E'.
+    MESSAGE S001(FSC1) WITH TEXT-038  DISPLAY LIKE 'E'.
+  ELSEIF PA_QUART IS INITIAL.
+    GV_VALID = 'E'.
+    MESSAGE S001(FSC1) WITH TEXT-038  DISPLAY LIKE 'E'.
+  ENDIF.
+ENDFORM.
